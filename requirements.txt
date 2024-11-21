@@ -1,0 +1,4 @@
+asyncpg
+loguru
+python_dateutil
+dotenv
