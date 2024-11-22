@@ -1,0 +1,4 @@
+aiogram
+APScheduler
+PyPDF2
+python-decouple

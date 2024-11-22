@@ -10,11 +10,11 @@ scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 admins = [int(admin_id) for admin_id in config("ADMINS").split(",")]
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", filename="logs/bot.log"
 )
 logger = logging.getLogger(__name__)
 
 bot = Bot(
-    token=config("TOKEN"), default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    token=config("TOKEN"), default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
 )
 dp = Dispatcher(storage=MemoryStorage())
