@@ -1,4 +1,5 @@
+aiogram
 asyncpg
 loguru
 python_dateutil
-dotenv
+pypdf2
