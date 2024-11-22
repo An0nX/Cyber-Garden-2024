@@ -1,4 +1,8 @@
 aiogram
 APScheduler
-PyPDF2
+faiss
+numpy
+openai
+pandas
 python-decouple
+scikit_learn
