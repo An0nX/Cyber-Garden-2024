@@ -11,7 +11,7 @@ start_router = Router()
 async def cmd_start(message: Message):
     """
     Handles the /start command and sends a welcome message to the user.
-    
+
     This function is triggered when a user sends the /start command to the bot.
     It responds with a greeting message and prompts the user to send a PDF
     document for analysis. A custom keyboard is also presented to the user.
@@ -21,5 +21,4 @@ async def cmd_start(message: Message):
     """
     await message.answer(
         "Здравствуйте! Я бот для анализа PDF-документов. Пожалуйста, отправьте мне PDF-файл с инструкциями.",
-        reply_markup=get_main_keyboard()
     )
