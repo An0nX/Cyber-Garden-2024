@@ -1,6 +1,9 @@
 from aiogram import Router
 from aiogram.types import Message
 import io
+from asyncio import to_thread
+
+from utils.agent import RAGSystem
 
 file_router = Router()
 

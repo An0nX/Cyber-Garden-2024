@@ -6,70 +6,115 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from decouple import config
 from io import StringIO, BytesIO
 import pandas as pd
+import json
 
 # Системный промт для задания контекста модели
-SYSTEM_PROMPT = """You’re an adept medical data analyst with extensive experience in extracting and organizing medical information from textual sources into structured formats. Your specialty lies in converting complex medical narratives into clear and concise CSV files that facilitate data analysis and interpretation.
+SYSTEM_PROMPT = """I want you to respond to my query in JSON format with two keys: `text` and `csv`.  
 
-Your task is to read the provided text and extract information to create a CSV file format with two columns: **Symptom** and **Diagnosis**. Follow these guidelines:  
-
-1. Identify the **symptom(s)** described in the text and write them exactly as they appear or in concise form if too verbose.  
-2. Identify the **diagnosis** mentioned and provide it in clear, specific terms.  
-3. If the text contains multiple symptoms or diagnoses, map each symptom to its corresponding diagnosis as separate rows in the CSV format.  
-4. If no diagnosis is mentioned or unclear, write "Not specified" under the **Diagnosis** column.  
-5. Output the result as text in CSV format, like this example:  
+1. Under the `text` key, provide a detailed textual response to the query. Write naturally and concisely.  
+2. Under the `csv` key, provide tabular data formatted as a CSV with the following structure:  
    Symptom,Diagnosis
    Fever,Influenza
    Headache,Migraine
+   - The first row must always contain the column headers: `Symptom` and `Diagnosis`.
+   - Each subsequent row should map a symptom to a diagnosis relevant to my query.  
+3. Ensure the `csv` data is returned as a string with each line separated by a newline character (`\n`).  
+
+For example, if the query is about common symptoms and their potential diagnoses, your response should follow this format:  
+
+
+{
+  "text": "Common symptoms like fever and headache can have various potential diagnoses. Fever is frequently associated with infections such as influenza, while headaches are often linked to conditions like migraines or tension-type headaches. It's important to consider additional symptoms and consult a medical professional for an accurate diagnosis.",
+  "csv": "Symptom,Diagnosis\nFever,Influenza\nHeadache,Migraine\nCough,Common Cold\nFatigue,Anemia\nChest Pain,Heart Attack"
+}
+
+Always adhere to this structure for your response.
 """
 
 
 class LLMOutputParser:
-    def __init__(self, llm_output:str) -> None:
+    def __init__(self, llm_output: str, system_prompt: str) -> None:
         """
         Initialize the LLMOutputParser with the output from a language model.
 
         Parameters
         ----------
         llm_output : str
-            The output from the language model, expected to be in CSV format as a string.
+            The output from the language model, expected to be in JSON format.
         """
         self.llm_output = llm_output
 
-    def parse_output(self) -> pd.DataFrame:
+    def parse_output(self) -> dict:
         """
-        Reads the LLM output as a CSV string and returns a pandas DataFrame.
-
-        Parameters
-        ----------
-        None
+        Parse the LLM output JSON string and return a dictionary.
 
         Returns
         -------
-        df : pandas.DataFrame
-            The LLM output parsed into a DataFrame
+        dict
+            A dictionary with keys 'text' and 'csv', or a fallback response in case of errors.
         """
-        data = StringIO(self.llm_output.strip())
-        df = pd.read_csv(data)
-        return df
+        try:
+            parsed_output = json.loads(self.llm_output)
+            # Проверка обязательных ключей
+            if "text" not in parsed_output or "csv" not in parsed_output:
+                return {
+                    "error": "Missing required keys 'text' or 'csv' in the JSON output.",
+                    "text": "Ошибка: отсутствуют обязательные ключи 'text' или 'csv' в ответе модели.",
+                    "csv": None,
+                }
+            return parsed_output
+        except json.JSONDecodeError as e:
+            return {
+                "error": f"Invalid JSON format in LLM output: {str(e)}",
+                "text": "Ошибка: не удалось обработать JSON от модели.",
+                "csv": None,
+            }
+        except Exception as e:
+            return {
+                "error": f"Unexpected error while parsing LLM output: {str(e)}",
+                "text": "Ошибка: произошла непредвиденная ошибка обработки JSON.",
+                "csv": None,
+            }
 
-    def save_to_csv(self, df: pd.DataFrame) -> BytesIO:
+    def parse_csv_to_df(self, csv_content: str) -> tuple[pd.DataFrame, str]:
         """
-        Saves the given DataFrame to a CSV file at the given file path.
+        Converts a CSV string into a pandas DataFrame.
 
         Parameters
         ----------
-        df : pandas.DataFrame
-            The DataFrame to save to the CSV file
+        csv_content : str
+            CSV string content.
 
         Returns
         -------
-        str
-            The contents of the CSV file as a string
+        tuple
+            (DataFrame, error_message). If parsing is successful, error_message is None.
         """
+        try:
+            data = StringIO(csv_content.strip())
+            return pd.read_csv(data), None
+        except Exception as e:
+            return None, f"Error parsing CSV content: {str(e)}"
+
+    def save_csv_to_buffer(self, csv_content: str) -> BytesIO:
+        """
+        Save the CSV content as a file-like object in memory.
+
+        Parameters
+        ----------
+        csv_content : str
+            CSV string content.
+
+        Returns
+        -------
+        BytesIO
+            A file-like object containing the CSV content, or None in case of error.
+        """
+        df, error = self.parse_csv_to_df(csv_content)
+        if error:
+            return None  # Возвращаем None, если CSV невалиден
         buffer = BytesIO()
-        # Сохраняем данные в формате CSV в буфер
         df.to_csv(buffer, index=False, encoding="utf-8")
-        # Перемещаем курсор буфера в начало, чтобы данные можно было читать
         buffer.seek(0)
         return buffer
 
@@ -110,7 +155,9 @@ class FAISSIndexer:
         """
         self.index.add(np.array(vectors).astype("float32"))
 
-    def search(self, query_vector: np.ndarray, top_k: int=5) -> tuple[np.ndarray, np.ndarray]:
+    def search(
+        self, query_vector: np.ndarray, top_k: int = 5
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Search for the top-k most similar vectors to the given query vector.
 
@@ -149,7 +196,9 @@ class OpenAIResponder:
         openai.api_key = api_key
         self.client = OpenAI()
 
-    def generate_response(self, query: str, context: str, model: str="o1-preview", mode: str="default") -> str:
+    def generate_response(
+        self, query: str, context: str, model: str = "o1-preview", mode: str = "default"
+    ) -> str:
         """
         Generates a response using the OpenAI API based on the provided query and context.
 
@@ -175,9 +224,14 @@ class OpenAIResponder:
         if mode == "system":
             messages.append({"role": "system", "content": SYSTEM_PROMPT})
 
-        messages.append(
-            {"role": "user", "content": f"Вопрос: {query}\nКонтекст: {context}\nОтвет:"}
-        )
+        if context:
+            messages.append(
+                {"role": "user", "content": f"Вопрос: {query}\nКонтекст: {context}"}
+            )
+        else:
+            messages.append(
+                {"role": "user", "content": f"{query}"}
+            )
 
         response = self.client.chat.completions.create(
             model=model,
@@ -233,7 +287,12 @@ class TextProcessor:
 
 # Главный класс для интеграции всех компонентов
 class RAGSystem:
-    def __init__(self, faiss_indexer: FAISSIndexer, responder: OpenAIResponder, text_processor: TextProcessor) -> None:
+    def __init__(
+        self,
+        faiss_indexer: FAISSIndexer,
+        responder: OpenAIResponder,
+        text_processor: TextProcessor,
+    ) -> None:
         """
         Initialize the RAGSystem with the given components.
 
@@ -270,7 +329,7 @@ class RAGSystem:
         vectors = self.text_processor.texts_to_vectors(documents)
         self.indexer.add_vectors(vectors)
 
-    def get_relevant_documents(self, query: str, top_k: int=5) -> np.ndarray:
+    def get_relevant_documents(self, query: str, top_k: int = 5) -> np.ndarray:
         """
         Retrieve the indices of the top-k most relevant documents for the given query.
 
@@ -290,7 +349,9 @@ class RAGSystem:
         _, indices = self.indexer.search(query_vector, top_k)
         return indices
 
-    def generate_answer(self, query: str, documents: list[str], mode: str="default", top_k: int=5) -> str:
+    def generate_answer(
+        self, query: str, documents: list[str], mode: str = "default", top_k: int = 5
+    ) -> str:
         """
         Generate an answer to the given query by finding the most relevant documents in the given collection,
         creating a context from the top-k most relevant documents, and then using the OpenAI API to generate a response.
@@ -317,42 +378,82 @@ class RAGSystem:
         return self.responder.generate_response(query=query, context=context, mode=mode)
 
 
-# Пример использования системы
-if __name__ == "__main__":
+# Инициализация переменной для хранения ранее загруженных документов
+previous_documents = []
+
+
+def llm_agent(text_input: str = None, documents: list[str] = None):
+    global previous_documents
+
     # Инициализация компонентов
     faiss_indexer = FAISSIndexer(vector_dimension=100)  # Размерность вектора
     responder = OpenAIResponder(api_key=config("OPENAI_API_KEY"))
     text_processor = TextProcessor()
-    output_parser = LLMOutputParser()
-
-    # Пример текста и документов
-    text_input = "Какие симптомы ожирения?"  # Пример пользовательского текста
-    documents = [
-        "Мигрень часто сопровождается сильной головной болью, тошнотой и чувствительностью к свету.",
-        "Ожирение может привести к различным заболеваниям, таким как диабет 2 типа и гипертония.",
-        "Пневмония характеризуется кашлем, одышкой и болями в груди.",
-    ]
 
     # Инициализация RAG-системы
     rag_system = RAGSystem(faiss_indexer, responder, text_processor)
-    rag_system.index_documents(documents)
 
-    # Логика выбора сценария
-    if not text_input and documents:
-        # Если текста нет, работаем только с документами, добавляем системный промт
-        query = "Обобщите основные заболевания из документов."
+    if documents:
+        # Если есть документы, индексируем их и сохраняем в переменную
+        rag_system.index_documents(documents)
+        previous_documents = documents
+    else:
+        # Если нет документов, используем ранее загруженные документы
+        documents = previous_documents
+
+    # Основной процесс с проверками
+    if documents:
+        # Если текста нет, обобщаем документы
+        query = "Обобщите основные заболевания из документов, ответ предоставьте в формате CSV с двумя колонками: симптомы и диагноз."
         answer = rag_system.generate_answer(query, documents, mode="system")
-
-
-    elif text_input and documents:
-        # Если есть текст и документы, работаем без системного промта или с обобщённым
+    elif text_input:
         query = text_input
-        answer = rag_system.generate_answer(query, documents)
-    elif text_input and not documents:
-        # Если есть только текст, используем RAG по базе данных
-        query = text_input
-        context = "Пожалуйста, предоставьте ответ на основании встроенной базы данных."
-        answer = responder.generate_response(query, context)
+        answer = rag_system.generate_answer(query, documents, mode="system")
+    else:
+        # Если нет текста и документов, возвращаем сообщение об ошибке
+        return {
+            "text": "",
+            "csv": "",
+            "error": "Ошибка: текст и документы отсутствуют.",
+        }
 
-    # Вывод ответа
-    print("Ответ:", answer)
+    # Парсим и обрабатываем результат
+    output_parser = LLMOutputParser(answer, SYSTEM_PROMPT)
+    parsed_output = output_parser.parse_output()
+
+    # Обрабатываем результат с учетом ошибок
+    response = {
+        "text": parsed_output.get("text", ""),
+        "csv_buffer": None,
+        "error": parsed_output.get("error", None),
+    }
+
+    if "csv" in parsed_output and parsed_output["csv"]:
+        # Если CSV присутствует, сохраняем в буфер
+        csv_buffer = output_parser.save_csv_to_buffer(parsed_output["csv"])
+        if csv_buffer:
+            response["csv_buffer"] = csv_buffer
+
+    return response
+
+
+if __name__ == "__main__":
+    response = llm_agent(
+        text_input="Какие симптомы характерны для вирусных заболеваний?",
+        documents=[
+            "Симптомы гриппа включают высокую температуру.",
+            "Мигрень вызывает сильную головную боль.",
+        ],
+    )
+
+    if response.get("error"):
+        print("Errors occurred during processing:")
+        print(response["error"])
+    else:
+        print("Text Response:")
+        print(response["text"])
+
+        if response["csv_buffer"]:
+            print("\nCSV Content:")
+            csv_df = pd.read_csv(response["csv_buffer"])
+            print(csv_df)
