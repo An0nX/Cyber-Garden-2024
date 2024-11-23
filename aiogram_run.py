@@ -3,7 +3,7 @@ from create_bot import bot, dp, scheduler
 from handlers.start import start_router
 from handlers.agent_connector import file_router
 
-# from work_time.time_func import send_time_msg
+from work_time.time_func import collect_garbage
 
 
 async def main():
@@ -14,8 +14,8 @@ async def main():
     deleting any existing webhook and starting the polling.
     """
 
-    # scheduler.add_job(send_time_msg, 'interval', seconds=10)
-    # scheduler.start()
+    scheduler.add_job(collect_garbage, "interval", seconds=10)
+    scheduler.start()
     dp.include_router(start_router)
     dp.include_router(file_router)
     await bot.delete_webhook(drop_pending_updates=True)
