@@ -1,4 +1,9 @@
-asyncpg
-loguru
-python_dateutil
-dotenv
+aiogram
+apscheduler
+faiss-gpu
+numpy
+openai
+pandas
+PyPDF2
+python-decouple
+scikit_learn
