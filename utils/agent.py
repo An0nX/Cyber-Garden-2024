@@ -1,4 +1,5 @@
 import openai
+from openai import OpenAI
 import faiss
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -76,16 +77,22 @@ class FAISSIndexer:
 class OpenAIResponder:
     def __init__(self, api_key):
         openai.api_key = api_key
+        self.client = OpenAI()
 
-    def generate_response(self, query, context):
-        """Генерация ответа с использованием модели GPT-3 с системным промтом"""
-        prompt = f"{SYSTEM_PROMPT}\nВопрос: {query}\nКонтекст: {context}\nОтвет:"
-        response = openai.Completion.create(
-            engine="gpt-3.5-turbo",  # Использование GPT-3.5
-            prompt=prompt,
-            max_tokens=150,
+    def generate_response(self, query, context, model="o1-preview", mode="default"):
+        """Генерация ответа с использованием модели GPT с учетом режима запуска"""
+        messages = []
+        
+        if mode == "system":
+            messages.append({"role": "system", "content": SYSTEM_PROMPT})
+        
+        messages.append({"role": "user", "content": f"Вопрос: {query}\nКонтекст: {context}\nОтвет:"})
+        
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
         )
-        return response.choices[0].text.strip()
+        return response.choices[0].message.content.strip()
 
 
 # Класс для обработки текстов и преобразования их в векторы
@@ -120,7 +127,7 @@ class RAGSystem:
         _, indices = self.indexer.search(query_vector, top_k)
         return indices
 
-    def generate_answer(self, query, documents, top_k=5):
+    def generate_answer(self, query, documents, mode="default", top_k=5):
         """Генерация ответа на основе запроса и документов"""
         relevant_indices = self.get_relevant_documents(query, top_k)
         context = "\n".join([documents[i] for i in relevant_indices[0]])
@@ -150,16 +157,16 @@ if __name__ == "__main__":
     if not text_input and documents:
         # Если текста нет, работаем только с документами, добавляем системный промт
         query = "Обобщите основные заболевания из документов."
-        answer = rag_system.generate_answer(query, documents, top_k=5)
+        answer = rag_system.generate_answer(query, documents, mode="system")
     elif text_input and documents:
         # Если есть текст и документы, работаем без системного промта или с обобщённым
         query = text_input
-        answer = rag_system.generate_answer(query, documents, top_k=5)
+        answer = rag_system.generate_answer(query, documents)
     elif text_input and not documents:
         # Если есть только текст, используем RAG по базе данных и системный промт
         query = text_input
         context = "Пожалуйста, предоставьте ответ на основании встроенной базы данных."
-        answer = responder.generate_response(query, context)
+        answer = responder.generate_response(query, context, mode="system")
     else:
         answer = "Нет данных для анализа."
 
