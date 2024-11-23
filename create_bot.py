@@ -7,10 +7,11 @@ from decouple import config
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-admins = [int(admin_id) for admin_id in config("ADMINS").split(",")]
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", filename="logs/bot.log"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename="logs/bot.log",
 )
 logger = logging.getLogger(__name__)
 
