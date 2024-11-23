@@ -9,18 +9,6 @@
 - **[`start.py`](handlers/start.py)**: Обработчик команд `/start` и `/help`, отправляет приветственное сообщение.
 - **[`agent_connector.py`](handlers/agent_connector.py)**: Обработчик для взаимодействия с агентом, настроенным для анализа текста и генерации ответов.
 
-### [`document_processing/`](document_processing)
-Модуль для обработки PDF-документов.
-- **[`pdf_parser.py`](document_processing/pdf_parser.py)**: Функция для извлечения текста из PDF-файла `extract_text_from_pdf`.
-
-### [`text_analysis/`](text_analysis)
-Модуль для анализа текста.
-- **[`analyzer.py`](text_analysis/analyzer.py)**: Функции для анализа текста, такие как `analyze_text`, `extract_symptoms`, `extract_diagnosis`, и `custom_analysis`.
-
-### [`response_generation/`](response_generation)
-Модуль для форматирования ответа.
-- **[`formatter.py`](response_generation/formatter.py)**: Функция для форматирования анализа в ответный текст `format_response`.
-
 ### [utils/](utils)
 Утилиты и вспомогательные функции.
 - **[`agent.py`](utils/agent.py)**: Класс для работы с OpenAI API и функции для генерации ответов на основе текста.
