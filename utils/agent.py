@@ -5,6 +5,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from decouple import config
 
 # Системный промт для задания контекста модели
+# TODO: Настроить SYSTEM PROMPT
 SYSTEM_PROMPT = """
 """
 
@@ -133,18 +134,34 @@ if __name__ == "__main__":
     responder = OpenAIResponder(api_key=config("OPENAI_API_KEY"))
     text_processor = TextProcessor()
 
-    # Пример документов
+    # Пример текста и документов
+    text_input = "Какие симптомы ожирения?"  # Пример пользовательского текста
     documents = [
         "Мигрень часто сопровождается сильной головной болью, тошнотой и чувствительностью к свету.",
         "Ожирение может привести к различным заболеваниям, таким как диабет 2 типа и гипертония.",
         "Пневмония характеризуется кашлем, одышкой и болями в груди.",
     ]
 
-    # Индексация документов
+    # Инициализация RAG-системы
     rag_system = RAGSystem(faiss_indexer, responder, text_processor)
     rag_system.index_documents(documents)
 
-    # Получение ответа на запрос
-    query = "Какие симптомы мигрени?"
-    answer = rag_system.generate_answer(query, documents)
+    # Логика выбора сценария
+    if not text_input and documents:
+        # Если текста нет, работаем только с документами, добавляем системный промт
+        query = "Обобщите основные заболевания из документов."
+        answer = rag_system.generate_answer(query, documents, top_k=5)
+    elif text_input and documents:
+        # Если есть текст и документы, работаем без системного промта или с обобщённым
+        query = text_input
+        answer = rag_system.generate_answer(query, documents, top_k=5)
+    elif text_input and not documents:
+        # Если есть только текст, используем RAG по базе данных и системный промт
+        query = text_input
+        context = "Пожалуйста, предоставьте ответ на основании встроенной базы данных."
+        answer = responder.generate_response(query, context)
+    else:
+        answer = "Нет данных для анализа."
+
+    # Вывод ответа
     print("Ответ:", answer)

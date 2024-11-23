@@ -1,8 +1,9 @@
 aiogram
 APScheduler
-faiss
 numpy
 openai
 pandas
 python-decouple
 scikit_learn
+torch
+faiss-cpu
