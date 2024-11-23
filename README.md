@@ -7,6 +7,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-%23F7931E.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/An0nX/Cyber-Garden-2024)
+![GitHub Tag](https://img.shields.io/github/v/tag/An0nX/Cyber-Garden-2024)
 
 
 Этот проект представляет собой Telegram-бота, который принимает PDF-документы, извлекает из них текст и анализирует его на основе предоставленных пользователем инструкций.
