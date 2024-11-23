@@ -1,7 +1,7 @@
 import asyncio
 from create_bot import bot, dp, scheduler
 from handlers.start import start_router
-from handlers.file_getter import file_router
+from handlers.agent_connector import file_router
 
 # from work_time.time_func import send_time_msg
 

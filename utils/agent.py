@@ -7,6 +7,7 @@ from decouple import config
 from io import StringIO, BytesIO
 import pandas as pd
 import json
+from utils.pdf_reader import extract_text_from_pdf
 
 # Системный промт для задания контекста модели
 SYSTEM_PROMPT = """I want you to respond to my query in JSON format with two keys: `text` and `csv`.  
@@ -378,67 +379,69 @@ class RAGSystem:
         return self.responder.generate_response(query=query, context=context, mode=mode)
 
 
-# Инициализация переменной для хранения ранее загруженных документов
-previous_documents = []
+class LLMAgent:
+    def __init__(self, api_key: str, vector_dimension: int = 100):
+        self.previous_documents = None
 
+        # Инициализация компонентов
+        self.faiss_indexer = FAISSIndexer(vector_dimension=vector_dimension)
+        self.responder = OpenAIResponder(api_key=api_key)
+        self.text_processor = TextProcessor()
 
-def llm_agent(text_input: str = None, documents: list[str] = None):
-    global previous_documents
+        # Инициализация RAG-системы
+        self.rag_system = RAGSystem(self.faiss_indexer, self.responder, self.text_processor)
 
-    # Инициализация компонентов
-    faiss_indexer = FAISSIndexer(vector_dimension=100)  # Размерность вектора
-    responder = OpenAIResponder(api_key=config("OPENAI_API_KEY"))
-    text_processor = TextProcessor()
+    def process(self, text_input: str = None, documents: BytesIO = None):
+        documents = [extract_text_from_pdf(documents)]
+        if documents:
+            # Если есть документы, индексируем их и сохраняем в переменную
+            self.rag_system.index_documents(documents)
+            self.previous_documents = documents
+        else:
+            # Если нет документов, используем ранее загруженные документы
+            documents = self.previous_documents
 
-    # Инициализация RAG-системы
-    rag_system = RAGSystem(faiss_indexer, responder, text_processor)
+        # Основной процесс с проверками
+        if documents:
+            # Если текста нет, обобщаем документы
+            query = "Обобщите основные заболевания из документов, ответ предоставьте в формате CSV с двумя колонками: симптомы и диагноз."
+            answer = self.rag_system.generate_answer(query, documents, mode="system")
+        elif text_input:
+            query = text_input
+            answer = self.rag_system.generate_answer(query, documents, mode="system")
+        else:
+            # Если нет текста и документов, возвращаем сообщение об ошибке
+            return {
+                "text": "",
+                "csv": "",
+                "error": "Ошибка: текст и документы отсутствуют.",
+            }
 
-    if documents:
-        # Если есть документы, индексируем их и сохраняем в переменную
-        rag_system.index_documents(documents)
-        previous_documents = documents
-    else:
-        # Если нет документов, используем ранее загруженные документы
-        documents = previous_documents
+        # Парсим и обрабатываем результат
+        output_parser = LLMOutputParser(answer, SYSTEM_PROMPT)
+        parsed_output = output_parser.parse_output()
 
-    # Основной процесс с проверками
-    if documents:
-        # Если текста нет, обобщаем документы
-        query = "Обобщите основные заболевания из документов, ответ предоставьте в формате CSV с двумя колонками: симптомы и диагноз."
-        answer = rag_system.generate_answer(query, documents, mode="system")
-    elif text_input:
-        query = text_input
-        answer = rag_system.generate_answer(query, documents, mode="system")
-    else:
-        # Если нет текста и документов, возвращаем сообщение об ошибке
-        return {
-            "text": "",
-            "csv": "",
-            "error": "Ошибка: текст и документы отсутствуют.",
+        # Обрабатываем результат с учетом ошибок
+        response = {
+            "text": parsed_output.get("text", ""),
+            "csv_buffer": None,
+            "error": parsed_output.get("error", None),
         }
 
-    # Парсим и обрабатываем результат
-    output_parser = LLMOutputParser(answer, SYSTEM_PROMPT)
-    parsed_output = output_parser.parse_output()
+        if "csv" in parsed_output and parsed_output["csv"]:
+            # Если CSV присутствует, сохраняем в буфер
+            csv_buffer = output_parser.save_csv_to_buffer(parsed_output["csv"])
+            if csv_buffer:
+                response["csv_buffer"] = csv_buffer
 
-    # Обрабатываем результат с учетом ошибок
-    response = {
-        "text": parsed_output.get("text", ""),
-        "csv_buffer": None,
-        "error": parsed_output.get("error", None),
-    }
-
-    if "csv" in parsed_output and parsed_output["csv"]:
-        # Если CSV присутствует, сохраняем в буфер
-        csv_buffer = output_parser.save_csv_to_buffer(parsed_output["csv"])
-        if csv_buffer:
-            response["csv_buffer"] = csv_buffer
-
-    return response
+        return response
 
 
 if __name__ == "__main__":
-    response = llm_agent(
+    api_key = config("OPENAI_API_KEY")
+    agent = LLMAgent(api_key=api_key)
+
+    response = agent.process(
         text_input="Какие симптомы характерны для вирусных заболеваний?",
         documents=[
             "Симптомы гриппа включают высокую температуру.",
