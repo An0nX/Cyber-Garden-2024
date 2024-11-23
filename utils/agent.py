@@ -24,7 +24,7 @@ Your task is to read the provided text and extract information to create a CSV f
 
 
 class LLMOutputParser:
-    def __init__(self, llm_output):
+    def __init__(self, llm_output:str) -> None:
         """
         Initialize the LLMOutputParser with the output from a language model.
 
@@ -35,7 +35,7 @@ class LLMOutputParser:
         """
         self.llm_output = llm_output
 
-    def parse_output(self):
+    def parse_output(self) -> pd.DataFrame:
         """
         Reads the LLM output as a CSV string and returns a pandas DataFrame.
 
@@ -52,7 +52,7 @@ class LLMOutputParser:
         df = pd.read_csv(data)
         return df
 
-    def save_to_csv(self, df, file_path):
+    def save_to_csv(self, df: pd.DataFrame) -> BytesIO:
         """
         Saves the given DataFrame to a CSV file at the given file path.
 
@@ -60,8 +60,6 @@ class LLMOutputParser:
         ----------
         df : pandas.DataFrame
             The DataFrame to save to the CSV file
-        file_path : str
-            The path to the file to save the DataFrame to
 
         Returns
         -------
@@ -73,12 +71,12 @@ class LLMOutputParser:
         df.to_csv(buffer, index=False, encoding="utf-8")
         # Перемещаем курсор буфера в начало, чтобы данные можно было читать
         buffer.seek(0)
-        return buffer.getvalue()
+        return buffer
 
 
 # Класс для работы с индексом FAISS
 class FAISSIndexer:
-    def __init__(self, vector_dimension):
+    def __init__(self, vector_dimension: int) -> None:
         """
         Initialize the FAISSIndexer with the given vector dimension.
 
@@ -96,7 +94,7 @@ class FAISSIndexer:
             vector_dimension
         )  # Индекс для поиска по L2 расстоянию
 
-    def add_vectors(self, vectors):
+    def add_vectors(self, vectors: list[np.ndarray]) -> None:
         """
         Add a list of vectors to the index.
 
@@ -112,7 +110,7 @@ class FAISSIndexer:
         """
         self.index.add(np.array(vectors).astype("float32"))
 
-    def search(self, query_vector, top_k=5):
+    def search(self, query_vector: np.ndarray, top_k: int=5) -> tuple[np.ndarray, np.ndarray]:
         """
         Search for the top-k most similar vectors to the given query vector.
 
@@ -139,7 +137,7 @@ class FAISSIndexer:
 
 # Класс для работы с OpenAI API
 class OpenAIResponder:
-    def __init__(self, api_key):
+    def __init__(self, api_key: str) -> None:
         """
         Initialize the OpenAIResponder with the given API key.
 
@@ -151,7 +149,7 @@ class OpenAIResponder:
         openai.api_key = api_key
         self.client = OpenAI()
 
-    def generate_response(self, query, context, model="o1-preview", mode="default"):
+    def generate_response(self, query: str, context: str, model: str="o1-preview", mode: str="default") -> str:
         """
         Generates a response using the OpenAI API based on the provided query and context.
 
@@ -190,7 +188,7 @@ class OpenAIResponder:
 
 # Класс для обработки текстов и преобразования их в векторы
 class TextProcessor:
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the TextProcessor.
 
@@ -199,7 +197,7 @@ class TextProcessor:
         """
         self.vectorizer = TfidfVectorizer(stop_words="english")
 
-    def texts_to_vectors(self, texts):
+    def texts_to_vectors(self, texts: list[str]) -> list[np.ndarray]:
         """
         Convert a list of texts into a list of vectors.
 
@@ -216,7 +214,7 @@ class TextProcessor:
         """
         return self.vectorizer.fit_transform(texts).toarray()
 
-    def text_to_vector(self, text):
+    def text_to_vector(self, text: str) -> np.ndarray:
         """
         Convert a single text into a vector.
 
@@ -235,7 +233,7 @@ class TextProcessor:
 
 # Главный класс для интеграции всех компонентов
 class RAGSystem:
-    def __init__(self, faiss_indexer, responder, text_processor):
+    def __init__(self, faiss_indexer: FAISSIndexer, responder: OpenAIResponder, text_processor: TextProcessor) -> None:
         """
         Initialize the RAGSystem with the given components.
 
@@ -256,7 +254,7 @@ class RAGSystem:
         self.responder = responder
         self.text_processor = text_processor
 
-    def index_documents(self, documents):
+    def index_documents(self, documents: list[str]) -> None:
         """
         Index a list of documents by converting them into vectors and adding them to the FAISS indexer.
 
@@ -272,7 +270,7 @@ class RAGSystem:
         vectors = self.text_processor.texts_to_vectors(documents)
         self.indexer.add_vectors(vectors)
 
-    def get_relevant_documents(self, query, top_k=5):
+    def get_relevant_documents(self, query: str, top_k: int=5) -> np.ndarray:
         """
         Retrieve the indices of the top-k most relevant documents for the given query.
 
@@ -292,7 +290,7 @@ class RAGSystem:
         _, indices = self.indexer.search(query_vector, top_k)
         return indices
 
-    def generate_answer(self, query, documents, mode="default", top_k=5):
+    def generate_answer(self, query: str, documents: list[str], mode: str="default", top_k: int=5) -> str:
         """
         Generate an answer to the given query by finding the most relevant documents in the given collection,
         creating a context from the top-k most relevant documents, and then using the OpenAI API to generate a response.
@@ -316,7 +314,7 @@ class RAGSystem:
         """
         relevant_indices = self.get_relevant_documents(query, top_k)
         context = "\n".join([documents[i] for i in relevant_indices[0]])
-        return self.responder.generate_response(query, context)
+        return self.responder.generate_response(query=query, context=context, mode=mode)
 
 
 # Пример использования системы
@@ -325,6 +323,7 @@ if __name__ == "__main__":
     faiss_indexer = FAISSIndexer(vector_dimension=100)  # Размерность вектора
     responder = OpenAIResponder(api_key=config("OPENAI_API_KEY"))
     text_processor = TextProcessor()
+    output_parser = LLMOutputParser()
 
     # Пример текста и документов
     text_input = "Какие симптомы ожирения?"  # Пример пользовательского текста
@@ -343,6 +342,8 @@ if __name__ == "__main__":
         # Если текста нет, работаем только с документами, добавляем системный промт
         query = "Обобщите основные заболевания из документов."
         answer = rag_system.generate_answer(query, documents, mode="system")
+
+
     elif text_input and documents:
         # Если есть текст и документы, работаем без системного промта или с обобщённым
         query = text_input
@@ -352,8 +353,6 @@ if __name__ == "__main__":
         query = text_input
         context = "Пожалуйста, предоставьте ответ на основании встроенной базы данных."
         answer = responder.generate_response(query, context)
-    else:
-        answer = "Нет данных для анализа."
 
     # Вывод ответа
     print("Ответ:", answer)
