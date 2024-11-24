@@ -95,9 +95,12 @@ class LLMOutputParser:
         """
         try:
             data = StringIO(csv_content.strip())
-            return pd.read_csv(data), None
+            df = pd.read_csv(data)
+            # Save the DataFrame to a CSV file
+            df.to_csv(data, index=False, encoding="utf-8")
+            return data, None
         except Exception as e:
-            return None, f"Error parsing CSV content: {str(e)}"
+            return None, f"Error parsing or saving CSV content: {str(e)}"
 
     def save_csv_to_buffer(self, csv_content: str) -> BytesIO:
         """
@@ -113,12 +116,9 @@ class LLMOutputParser:
         BytesIO
             A file-like object containing the CSV content, or None in case of error.
         """
-        df, error = self.parse_csv_to_df(csv_content)
+        buffer, error = self.parse_csv_to_df(csv_content)
         if error:
             return None  # Возвращаем None, если CSV невалиден
-        buffer = BytesIO()
-        df.to_csv(buffer, index=False, encoding="utf-8")
-        buffer.seek(0)
         return buffer
 
 
@@ -226,11 +226,14 @@ class OpenAIResponder:
         messages = []
 
         if mode == "system":
-            messages.append({"role": "system", "content": SYSTEM_PROMPT})
+            prompt_message = f"Промпт: {SYSTEM_PROMPT}\n"
 
         if context:
             messages.append(
-                {"role": "user", "content": f"Вопрос: {query}\nКонтекст: {context}"}
+                {
+                    "role": "user",
+                    "content": f"{prompt_message}Вопрос: {query}\nКонтекст: {context}",
+                }
             )
         else:
             messages.append({"role": "user", "content": f"{query}"})
@@ -412,7 +415,9 @@ class RAGSystem:
         relevant_indices = self.get_relevant_documents(query, top_k)
         logging.debug(f"Got relevant indices: {relevant_indices}")
 
-        context = "\n".join([self.text_processor.chunks[i] for i in relevant_indices[0]])
+        context = "\n".join(
+            [self.text_processor.chunks[i] for i in relevant_indices[0]]
+        )
 
         logging.debug(f"Got context: {context}")
 
@@ -476,11 +481,13 @@ class LLMAgent:
             "error": parsed_output.get("error", None),
         }
 
-        if "csv" in parsed_output and parsed_output["csv"]:
+        if parsed_output.get("csv", None) != None:
             # Если CSV присутствует, сохраняем в буфер
-            csv_buffer = output_parser.save_csv_to_buffer(parsed_output["csv"])
+            csv_buffer = parsed_output["csv"]
             if csv_buffer:
                 response["csv_buffer"] = csv_buffer
+
+        logging.debug(f"Got model response: {response}")
 
         return response
 
