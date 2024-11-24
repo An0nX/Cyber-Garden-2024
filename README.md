@@ -9,6 +9,7 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/An0nX/Cyber-Garden-2024)
 ![GitHub Tag](https://img.shields.io/github/v/tag/An0nX/Cyber-Garden-2024)
 
+![Пример работы](https://github.com/user-attachments/assets/65d5fe58-a341-4b1b-8b23-0ea46a0e5695)
 
 Этот проект представляет собой Telegram-бота, который принимает PDF-документы, извлекает из них текст и анализирует его на основе предоставленных пользователем инструкций.
 
