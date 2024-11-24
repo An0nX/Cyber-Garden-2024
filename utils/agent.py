@@ -236,6 +236,8 @@ class OpenAIResponder:
             messages.append({"role": "user", "content": f"{query}"})
 
         try:
+            logging.debug(f"Sending ChatGPT request: {messages}")
+
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -243,11 +245,14 @@ class OpenAIResponder:
 
             result = response.choices[0].message.content.strip()
 
-            logging.debug(f'Got ChatGPT response: {result}')
+            logging.debug(f"Got ChatGPT response: {result}")
 
             return result
         except openai.PermissionDeniedError as error:
-            if error.code == 403 and error.error.get("code") == "unsupported_country_region_territory":
+            if (
+                error.code == 403
+                and error.error.get("code") == "unsupported_country_region_territory"
+            ):
                 logging.error(
                     "Your country is not supported by the OpenAI API. Please switch to a different API provider or use a VPN."
                 )
@@ -281,7 +286,15 @@ class TextProcessor:
         """
         logging.debug(f"Got texts type: {type(texts)}")
         logging.debug(f"Got texts: {texts}")
-        matrix = self.vectorizer.fit_transform(texts)
+        chunk_size = 512  # Размер чанка в символах
+        self.chunks = []
+        for text in texts:
+            for i in range(0, len(text), chunk_size):
+                chunk = text[i : i + chunk_size]
+                self.chunks.append(chunk)
+
+        matrix = self.vectorizer.fit_transform(self.chunks)
+
         logging.debug(f"Got matrix type: {type(matrix)}")
         logging.debug(f"Got matrix: {matrix}")
         vectors = matrix.toarray()
@@ -397,7 +410,12 @@ class RAGSystem:
             The generated response from the OpenAI model, stripped of any leading or trailing spaces.
         """
         relevant_indices = self.get_relevant_documents(query, top_k)
-        context = "\n".join([documents[i] for i in relevant_indices[0]])
+        logging.debug(f"Got relevant indices: {relevant_indices}")
+
+        context = "\n".join([self.text_processor.chunks[i] for i in relevant_indices[0]])
+
+        logging.debug(f"Got context: {context}")
+
         return self.responder.generate_response(query=query, context=context, mode=mode)
 
 
@@ -429,12 +447,17 @@ class LLMAgent:
         # Основной процесс с проверками
         if documents:
             # Если текста нет, обобщаем документы
+            logging.debug("Обнаружен документ, входного текста не найдено")
             query = "Обобщите основные заболевания из документов, ответ предоставьте в формате CSV с двумя колонками: симптомы и диагноз."
             answer = self.rag_system.generate_answer(query, documents, mode="system")
         elif text_input:
+            logging.debug("Обнаружен входной текст")
             query = text_input
             answer = self.rag_system.generate_answer(query, documents, mode="system")
         else:
+            logging.debug(
+                "Текст и документы отсутствуют, возвращаем сообщение об ошибке"
+            )
             # Если нет текста и документов, возвращаем сообщение об ошибке
             return {
                 "text": "",
