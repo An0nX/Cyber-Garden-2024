@@ -2,8 +2,6 @@ from aiogram import Router
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 
-from keyboards.start import get_main_keyboard
-
 start_router = Router()
 
 

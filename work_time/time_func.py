@@ -1,5 +1,9 @@
 import gc
+from asyncify import asyncify
+import asyncio
 
+
+@asyncify
 def collect_garbage():
     """
     Forces a garbage collection.

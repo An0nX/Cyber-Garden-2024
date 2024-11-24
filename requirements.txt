@@ -1,9 +1,10 @@
 aiogram
 apscheduler
-faiss-gpu
+faiss-cpu
 numpy
 openai
 pandas
 PyPDF2
 python-decouple
 scikit_learn
+asyncify
