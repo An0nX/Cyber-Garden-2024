@@ -8,6 +8,8 @@ from io import StringIO, BytesIO
 import pandas as pd
 import json
 from utils.pdf_reader import extract_text_from_pdf
+from asyncify import asyncify
+from create_bot import logging
 
 # Системный промт для задания контекста модели
 SYSTEM_PROMPT = """I want you to respond to my query in JSON format with two keys: `text` and `csv`.  
@@ -140,7 +142,7 @@ class FAISSIndexer:
             vector_dimension
         )  # Индекс для поиска по L2 расстоянию
 
-    def add_vectors(self, vectors: list[np.ndarray]) -> None:
+    def add_vectors(self, vectors) -> None:
         """
         Add a list of vectors to the index.
 
@@ -154,6 +156,7 @@ class FAISSIndexer:
         -------
         None
         """
+
         self.index.add(np.array(vectors).astype("float32"))
 
     def search(
@@ -230,15 +233,24 @@ class OpenAIResponder:
                 {"role": "user", "content": f"Вопрос: {query}\nКонтекст: {context}"}
             )
         else:
-            messages.append(
-                {"role": "user", "content": f"{query}"}
+            messages.append({"role": "user", "content": f"{query}"})
+
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
             )
 
-        response = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-        )
-        return response.choices[0].message.content.strip()
+            result = response.choices[0].message.content.strip()
+
+            logging.debug(f'Got ChatGPT response: {result}')
+
+            return result
+        except openai.PermissionDeniedError as error:
+            if error.code == 403 and error.error.get("code") == "unsupported_country_region_territory":
+                logging.error(
+                    "Your country is not supported by the OpenAI API. Please switch to a different API provider or use a VPN."
+                )
 
 
 # Класс для обработки текстов и преобразования их в векторы
@@ -267,7 +279,15 @@ class TextProcessor:
             The list of vectors, where each vector is a 2D numpy array
             representing the corresponding text.
         """
-        return self.vectorizer.fit_transform(texts).toarray()
+        logging.debug(f"Got texts type: {type(texts)}")
+        logging.debug(f"Got texts: {texts}")
+        matrix = self.vectorizer.fit_transform(texts)
+        logging.debug(f"Got matrix type: {type(matrix)}")
+        logging.debug(f"Got matrix: {matrix}")
+        vectors = matrix.toarray()
+        logging.debug(f"Got vectors type: {type(vectors)}")
+        logging.debug(f"Got vectors: {vectors}")
+        return vectors
 
     def text_to_vector(self, text: str) -> np.ndarray:
         """
@@ -283,7 +303,7 @@ class TextProcessor:
         vector : np.ndarray
             The vector representation of the text, as a 1D numpy array.
         """
-        return self.vectorizer.transform([text]).toarray()[0]
+        return self.vectorizer.transform([text])
 
 
 # Главный класс для интеграции всех компонентов
@@ -310,7 +330,6 @@ class RAGSystem:
         -------
         None
         """
-        self.indexer = faiss_indexer
         self.responder = responder
         self.text_processor = text_processor
 
@@ -328,6 +347,9 @@ class RAGSystem:
         None
         """
         vectors = self.text_processor.texts_to_vectors(documents)
+        vector_dimension = vectors[0].shape[0]
+        logging.debug(f"Got vector dimension: {vector_dimension}")
+        self.indexer = FAISSIndexer(vector_dimension=vector_dimension)
         self.indexer.add_vectors(vectors)
 
     def get_relevant_documents(self, query: str, top_k: int = 5) -> np.ndarray:
@@ -347,7 +369,7 @@ class RAGSystem:
             The indices of the top-k most relevant documents in the indexed collection.
         """
         query_vector = self.text_processor.text_to_vector(query)
-        _, indices = self.indexer.search(query_vector, top_k)
+        _, indices = self.indexer.search(query_vector.toarray(), top_k)
         return indices
 
     def generate_answer(
@@ -380,7 +402,7 @@ class RAGSystem:
 
 
 class LLMAgent:
-    def __init__(self, api_key: str, vector_dimension: int = 100):
+    def __init__(self, api_key: str, vector_dimension: int = 1):
         self.previous_documents = None
 
         # Инициализация компонентов
@@ -389,10 +411,13 @@ class LLMAgent:
         self.text_processor = TextProcessor()
 
         # Инициализация RAG-системы
-        self.rag_system = RAGSystem(self.faiss_indexer, self.responder, self.text_processor)
+        self.rag_system = RAGSystem(
+            self.faiss_indexer, self.responder, self.text_processor
+        )
 
+    @asyncify
     def process(self, text_input: str = None, documents: BytesIO = None):
-        documents = [extract_text_from_pdf(documents)]
+        documents = extract_text_from_pdf(documents)
         if documents:
             # Если есть документы, индексируем их и сохраняем в переменную
             self.rag_system.index_documents(documents)

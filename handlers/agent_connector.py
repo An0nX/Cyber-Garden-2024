@@ -3,20 +3,22 @@ from aiogram.types import Message, BufferedInputFile
 import io
 from asyncio import to_thread
 from decouple import config
+from create_bot import bot
 
 from utils.agent import LLMAgent
 
 file_router = Router()
 
-@file_router.message(lambda message: message.document.mime_type == 'application/pdf')
+@file_router.message(lambda message: message.document and message.document.mime_type == 'application/pdf')
 async def handle_pdf_file(message: Message):
-    document = await message.document.get_file()
-    file_bytes = await document.download(destination=io.BytesIO())
+    document = message.document
+    file_bytes = io.BytesIO()
+    await bot.download(document, destination=file_bytes)
     text_caption = message.caption or None
 
     llm_agent = LLMAgent(api_key=config("OPENAI_API_KEY"))
 
-    response = await to_thread(llm_agent.process, text_input=text_caption, documents=file_bytes)
+    response = await llm_agent.process(text_input=text_caption, documents=file_bytes)
 
     if response.get("error"):
         await message.reply(f"Errors occurred during processing: {response["error"]}")
@@ -40,7 +42,7 @@ async def handle_pdf_file(message: Message):
 async def handle_text(message: Message):
     text = message.text
     llm_agent = LLMAgent(api_key=config("OPENAI_API_KEY"))
-    response = await to_thread(llm_agent.process, text_input=text)
+    response = await llm_agent.process(text_input=text)
 
     if response.get("error"):
         await message.reply(f"Errors occurred during processing: {response['error']}")

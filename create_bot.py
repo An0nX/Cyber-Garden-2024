@@ -9,9 +9,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     filename="logs/bot.log",
+    encoding="utf-8",
 )
 logger = logging.getLogger(__name__)
 

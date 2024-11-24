@@ -1,8 +1,9 @@
 import PyPDF2
 import io
+from create_bot import logging
 
 
-def extract_text_from_pdf(file: io.BytesIO) -> str:
+def extract_text_from_pdf(file: io.BytesIO) -> list[str]:
     """
     Extract text from a PDF file.
 
@@ -16,10 +17,13 @@ def extract_text_from_pdf(file: io.BytesIO) -> str:
     str
         The text extracted from the PDF file.
     """
+    logging.debug(f'Got PDF file io object: {file}')
+
     pdf_reader = PyPDF2.PdfReader(file)
     text = ""
-    for page_num in range(pdf_reader.pages):
-        pdf_page = pdf_reader[page_num]
-        text += '\n' + pdf_page.extract_text()
+    for page in pdf_reader.pages:
+        text += "\n" + page.extract_text()
 
-    return text
+    logging.debug(f'Extracted text from PDF: {text}')
+
+    return [text]
